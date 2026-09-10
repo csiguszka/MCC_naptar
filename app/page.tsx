@@ -138,7 +138,12 @@ export default function Home() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [currentPage, setCurrentPage] = useState(0);
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [showTopBar, setShowTopBar] = useState(true);
+  const [showTopBar, setShowTopBar] = useState(() => {
+    if (typeof window === "undefined") return true;
+
+    // 1200px szélesség felett alapból rejtve
+    return window.innerWidth <= 1200;
+  });
   const [currentUser, setCurrentUser] = useState<SessionUser | null>(null);
   const [showLogin, setShowLogin] = useState(false);
   const [editingEventId, setEditingEventId] = useState<number | null>(null);
@@ -183,6 +188,8 @@ export default function Home() {
       }));
     }
   }, [categories, eventForm.category]);
+
+
 
   const loadEvents = async () => {
     const params = new URLSearchParams({
