@@ -164,7 +164,7 @@ export default function Home() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.ctrlKey && event.key.toLowerCase() === "q") {
+      if (event.key.toLowerCase() === "q") {
         event.preventDefault();
         setShowTopBar((previous) => !previous);
       }
