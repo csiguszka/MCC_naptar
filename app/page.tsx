@@ -510,7 +510,7 @@ export default function Home() {
       {view === "display" && (
         <section className="display-screen">
           <header className="display-header">
-            <img src="https://www.ojim.fr/wp-content/uploads/2024/11/mcc-budapest.jpg" alt="Logo" className="logo w-1/4" />
+            <img src="https://www.ojim.fr/wp-content/uploads/2024/11/mcc-budapest.jpg" alt="Logo" className="logo w-56" />
             <div className="datetime">
               <div className="current-date">{formatDateLong(selectedDate)}</div>
               <div className="current-time">
