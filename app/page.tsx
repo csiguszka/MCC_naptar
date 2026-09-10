@@ -142,7 +142,7 @@ export default function Home() {
     if (typeof window === "undefined") return true;
 
     // 1200px szélesség felett alapból rejtve
-    return window.innerWidth <= 1200;
+    return window.innerWidth <= 2000;
   });
   const [currentUser, setCurrentUser] = useState<SessionUser | null>(null);
   const [showLogin, setShowLogin] = useState(false);
