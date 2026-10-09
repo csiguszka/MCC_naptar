@@ -42,7 +42,8 @@ model Category {
   updatedAt   DateTime  @updatedAt
   createdById Int?
   createdBy   User?     @relation("CategoryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  events      Event[]
+  events      Event[]   @relation("EventPrimaryCategory")
+  categorizedEvents Event[] @relation("EventCategories")
 }
 
 model Event {
@@ -51,8 +52,10 @@ model Event {
   location      String
   startDateTime DateTime
   endDateTime   DateTime
+  tags          String[] @default([])
   categoryId    Int
-  category      Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  category      Category @relation("EventPrimaryCategory", fields: [categoryId], references: [id], onDelete: Restrict)
+  categories    Category[] @relation("EventCategories")
   createdById   Int
   createdBy     User     @relation("EventCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   createdAt     DateTime @default(now())

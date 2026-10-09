@@ -16,6 +16,8 @@ type EventItem = {
   startDateTime: string;
   endDateTime: string;
   category: CategoryItem;
+  categories: CategoryItem[];
+  tags: string[];
   createdBy: {
     id: number;
     role: string;
@@ -39,7 +41,8 @@ type MessageState = {
 type EventFormState = {
   title: string;
   location: string;
-  category: string;
+  categoryIds: number[];
+  tags: string;
   startTime: string;
   endTime: string;
 };
@@ -47,7 +50,8 @@ type EventFormState = {
 const defaultEventForm = (): EventFormState => ({
   title: "",
   location: "",
-  category: "",
+  categoryIds: [],
+  tags: "",
   startTime: "09:00",
   endTime: "10:00",
 });
@@ -144,6 +148,7 @@ export default function AdminPage() {
     month: "long",
   }).format(new Date(`${selectedDate}T12:00:00`));
   const [selectedCategory, setSelectedCategory] = useState("all");
+  const [selectedTag, setSelectedTag] = useState("all");
   const [showLogin, setShowLogin] = useState(false);
   const [editingEventId, setEditingEventId] = useState<number | null>(null);
   const [editingCategoryId, setEditingCategoryId] = useState<number | null>(null);
@@ -162,19 +167,26 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
-    if (categories.length > 0 && !eventForm.category) {
+    if (!statusMessage) return;
+
+    const timeoutId = window.setTimeout(() => setStatusMessage(null), 5000);
+    return () => window.clearTimeout(timeoutId);
+  }, [statusMessage]);
+
+  useEffect(() => {
+    if (categories.length > 0 && eventForm.categoryIds.length === 0) {
       setEventForm((previous) => ({
         ...previous,
-        category: categories[0].name,
+        categoryIds: [categories[0].id],
       }));
     }
-  }, [categories, eventForm.category]);
+  }, [categories, eventForm.categoryIds.length]);
 
   useEffect(() => {
     if (currentUser) {
       void loadEvents();
     }
-  }, [currentUser, selectedCategory, selectedDate]);
+  }, [currentUser, selectedDate]);
 
   const loadCurrentUser = async () => {
     const response = await fetch("/api/users/me", { cache: "no-store" });
@@ -194,7 +206,7 @@ export default function AdminPage() {
 
   const loadEvents = async () => {
     const params = new URLSearchParams({
-      category: selectedCategory,
+      category: "all",
       view: "display",
       date: selectedDate,
     });
@@ -205,6 +217,14 @@ export default function AdminPage() {
     const loadedEvents = (await response.json()) as EventItem[];
     setEvents(Array.isArray(loadedEvents) ? loadedEvents : []);
   };
+
+  const availableTags = [...new Set(events.flatMap((event) => event.tags ?? []))].sort((left, right) => left.localeCompare(right));
+  const filteredEvents = events.filter((event) => {
+    const eventCategories = event.categories?.length ? event.categories : [event.category];
+    const matchesCategory = selectedCategory === "all" || eventCategories.some((category) => category.name === selectedCategory);
+    const matchesTag = selectedTag === "all" || event.tags?.includes(selectedTag);
+    return matchesCategory && matchesTag;
+  });
 
   const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -340,7 +360,8 @@ export default function AdminPage() {
         body: JSON.stringify({
           title: eventForm.title,
           location: eventForm.location,
-          category: eventForm.category,
+          categoryIds: eventForm.categoryIds,
+          tags: eventForm.tags.split(",").map((tag) => tag.trim()).filter(Boolean),
           startDateTime: startDateTime.toISOString(),
           endDateTime: endDateTime.toISOString(),
         }),
@@ -385,7 +406,10 @@ export default function AdminPage() {
     setEventForm({
       title: eventItem.title,
       location: eventItem.location,
-      category: eventItem.category.name,
+      categoryIds: eventItem.categories?.length
+        ? eventItem.categories.map((category) => category.id)
+        : [eventItem.category.id],
+      tags: (eventItem.tags ?? []).join(", "),
       startTime: start.time,
       endTime: end.time,
     });
@@ -397,25 +421,25 @@ export default function AdminPage() {
   };
 
   return (
-    <main className="calendar-shell">
-      <div className="top-bar">
+    <main className="min-h-screen bg-[#24334a] p-4 text-[#f4f1e8] md:p-6 [&_input]:rounded-lg [&_input]:border [&_input]:border-[#45536a] [&_input]:bg-[#212836] [&_input]:px-3 [&_input]:py-2 [&_input]:text-[#f4f1e8] [&_input[type=checkbox]]:h-4 [&_input[type=checkbox]]:w-4 [&_input[type=checkbox]]:p-0 [&_input[type=checkbox]]:accent-[#c9a227] [&_select]:rounded-lg [&_select]:border [&_select]:border-[#45536a] [&_select]:bg-[#212836] [&_select]:px-3 [&_select]:py-2 [&_select]:text-[#f4f1e8]">
+      <div className="mb-6 flex flex-col items-stretch justify-between gap-5 xl:flex-row xl:items-center">
 
-        <div className="toolbar">
-          <Link href="/" className="secondary-button">
+        <div className="flex flex-wrap items-center gap-3">
+          <Link href="/" className="inline-flex items-center justify-center rounded-lg border border-[#45536a] bg-[#212836] px-4 py-2 font-bold text-[#f4f1e8] no-underline hover:opacity-90">
             Vissza a főoldalra
           </Link>
 
           {currentUser ? (
-            <div className="user-box">
+            <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[#45536a] bg-[#1b212b] px-3 py-2 text-[#c3cad5]">
               <span>
                 {currentUser.name} ({currentUser.role})
               </span>
-              <button type="button" className="primary-button" onClick={handleLogout}>
+              <button type="button" className="rounded-lg bg-[#c9a227] px-4 py-2 font-bold text-[#1b1305] hover:opacity-90" onClick={handleLogout}>
                 Kijelentkezés
               </button>
             </div>
           ) : (
-            <button type="button" className="primary-button" onClick={() => setShowLogin(true)}>
+            <button type="button" className="rounded-lg bg-[#c9a227] px-4 py-2 font-bold text-[#1b1305] hover:opacity-90" onClick={() => setShowLogin(true)}>
               Bejelentkezés
             </button>
           )}
@@ -423,16 +447,30 @@ export default function AdminPage() {
       </div>
 
       {statusMessage && (
-        <div className={`status-banner ${statusMessage.type}`}>{statusMessage.text}</div>
+        <div
+          role={statusMessage.type === "error" ? "alert" : "status"}
+          aria-live={statusMessage.type === "error" ? "assertive" : "polite"}
+          className={`fixed left-1/2 top-4 z-[100] flex w-[calc(100%-2rem)] max-w-md -translate-x-1/2 items-start justify-between gap-4 rounded-xl border px-4 py-3 shadow-2xl backdrop-blur ${statusMessage.type === "success" ? "border-green-500/40 bg-[#1b212b]/95 text-green-100" : "border-red-400/40 bg-[#1b212b]/95 text-red-100"}`}
+        >
+          {statusMessage.text}
+          <button
+            type="button"
+            aria-label="Visszajelzés bezárása"
+            className="shrink-0 rounded px-1 text-lg leading-5 opacity-75 hover:opacity-100"
+            onClick={() => setStatusMessage(null)}
+          >
+            ×
+          </button>
+        </div>
       )}
 
       {!currentUser && showLogin && (
-        <section className="content-panel">
-          <div className="panel-header">
-            <h2>Bejelentkezés</h2>
+        <section className="rounded-2xl border border-[#45536a] bg-[#1b212b]/90 p-5 md:p-6">
+          <div className="mb-5 flex items-center justify-between gap-5">
+            <h2 className="m-0 font-serif text-2xl md:text-3xl">Bejelentkezés</h2>
           </div>
 
-          <form onSubmit={handleLogin} className="login-form">
+          <form onSubmit={handleLogin} className="flex max-w-xl flex-col gap-4 [&_label]:flex [&_label]:flex-col [&_label]:gap-2 [&_label]:text-sm [&_label]:text-[#c3cad5]">
             <label>
               <span>Felhasználónév</span>
               <input
@@ -454,8 +492,8 @@ export default function AdminPage() {
               />
             </label>
 
-            <div className="form-actions">
-              <button type="submit" className="primary-button">
+            <div className="mt-3 flex flex-wrap gap-3">
+              <button type="submit" className="rounded-lg bg-[#c9a227] px-4 py-2 font-bold text-[#1b1305] hover:opacity-90">
                 Belépés
               </button>
             </div>
@@ -465,16 +503,33 @@ export default function AdminPage() {
 
       {currentUser && (
         <>
-          <section className="content-panel">
-            <div className="panel-header">
-              <h2>Események kezelése</h2>
+          <section className="rounded-2xl border border-[#45536a] bg-[#1b212b]/90 p-5 md:p-6">
+            <div className="mb-5 flex items-center justify-between gap-5">
+              <h2 className="m-0 font-serif text-2xl md:text-3xl">Események kezelése</h2>
             </div>
 
-            <div className="admin-grid">
-              <form className="admin-card" onSubmit={handleEventSubmit}>
-                <h4>{editingEventId ? "Esemény szerkesztése" : "Esemény létrehozása"}</h4>
+            <div className="mb-5 flex flex-wrap gap-4 text-sm text-[#c3cad5]">
+              <label className="flex items-center gap-3 rounded-lg border border-[#45536a] bg-[#212836] px-3 py-2">
+                <span>Kategória szűrő</span>
+                <select value={selectedCategory} onChange={(event) => setSelectedCategory(event.target.value)}>
+                  <option value="all">Összes</option>
+                  {categories.map((category) => <option key={category.id} value={category.name}>{category.name}</option>)}
+                </select>
+              </label>
+              <label className="flex items-center gap-3 rounded-lg border border-[#45536a] bg-[#212836] px-3 py-2">
+                <span>Címke szűrő</span>
+                <select value={selectedTag} onChange={(event) => setSelectedTag(event.target.value)}>
+                  <option value="all">Összes</option>
+                  {availableTags.map((tag) => <option key={tag} value={tag}>{tag}</option>)}
+                </select>
+              </label>
+            </div>
 
-                <div className="form-row">
+            <div className="grid grid-cols-1 gap-5 2xl:grid-cols-[minmax(340px,0.8fr)_minmax(0,1.4fr)]">
+              <form className="my-2 rounded-xl border border-[#45536a] bg-[#212836] p-5 [&_label]:flex [&_label]:flex-col [&_label]:gap-2 [&_label]:text-sm [&_label]:text-[#c3cad5]" onSubmit={handleEventSubmit}>
+                <h4 className="mb-4 font-serif text-xl">{editingEventId ? "Esemény szerkesztése" : "Esemény létrehozása"}</h4>
+
+                <div className="mb-4 flex flex-col gap-2">
                   <label>
                     <span>Cím</span>
                     <input
@@ -486,7 +541,7 @@ export default function AdminPage() {
                   </label>
                 </div>
 
-                <div className="form-row">
+                <div className="mb-4 flex flex-col gap-2">
                   <label>
                     <span>Helyszín</span>
                     <input
@@ -498,31 +553,45 @@ export default function AdminPage() {
                   </label>
                 </div>
 
-                <div className="form-row double">
+                <div className="mb-4 flex flex-col gap-2">
+                  <span>Kategóriák</span>
+                  <div className="flex flex-wrap gap-3">
+                    {categories.map((category) => (
+                      <label key={category.id} className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={eventForm.categoryIds.includes(category.id)}
+                          onChange={(event) => setEventForm((previous) => ({
+                            ...previous,
+                            categoryIds: event.target.checked
+                              ? [...previous.categoryIds, category.id]
+                              : previous.categoryIds.filter((id) => id !== category.id),
+                          }))}
+                        />
+                        <span>{category.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mb-4 flex flex-col gap-2">
                   <label>
-                    <span>Kategória</span>
-                    <select
-                      value={eventForm.category}
-                      onChange={(event) =>
-                        setEventForm((previous) => ({ ...previous, category: event.target.value }))
-                      }
-                    >
-                      {categories.map((category) => (
-                        <option key={category.id} value={category.name}>
-                          {category.name}
-                        </option>
-                      ))}
-                    </select>
+                    <span>Címkék (vesszővel elválasztva)</span>
+                    <input
+                      value={eventForm.tags}
+                      onChange={(event) => setEventForm((previous) => ({ ...previous, tags: event.target.value }))}
+                      placeholder="például: nyílt nap, előadás"
+                    />
                   </label>
                 </div>
 
-                <div className="form-row">
+                <div className="mb-4 flex flex-col gap-2">
                   <span>Dátum</span>
-                  <div className="content-panel">
-                    <div className="panel-header">
+                  <div className="rounded-xl border border-[#45536a] bg-[#1b212b] p-4">
+                    <div className="mb-4 flex items-center justify-between gap-4">
                       <button
                         type="button"
-                        className="nav-button"
+                        className="h-10 w-10 rounded-lg border border-[#45536a] bg-[#212836] text-xl"
                         onClick={() => {
                           const next = new Date(`${selectedDate}T12:00:00`);
                           next.setMonth(next.getMonth() - 1);
@@ -531,10 +600,10 @@ export default function AdminPage() {
                       >
                         ←
                       </button>
-                      <h2>{monthName}</h2>
+                      <h2 className="m-0 font-serif text-lg">{monthName}</h2>
                       <button
                         type="button"
-                        className="nav-button"
+                        className="h-10 w-10 rounded-lg border border-[#45536a] bg-[#212836] text-xl"
                         onClick={() => {
                           const next = new Date(`${selectedDate}T12:00:00`);
                           next.setMonth(next.getMonth() + 1);
@@ -545,9 +614,9 @@ export default function AdminPage() {
                       </button>
                     </div>
 
-                    <div className="calendar-grid-month">
+                    <div className="grid grid-cols-7 gap-1.5">
                       {Array.from({ length: 7 }, (_, index) => (
-                        <div key={index} className="weekday-header">
+                        <div key={index} className="pb-1 text-center text-xs text-[#aeb7c6]">
                           {new Intl.DateTimeFormat("hu-HU", { weekday: "short" }).format(
                             new Date(2025, 0, index + 1),
                           )}
@@ -564,10 +633,10 @@ export default function AdminPage() {
                           <button
                             key={dayKey}
                             type="button"
-                            className={`month-day ${isCurrentMonth ? "in-month" : "outside"} ${isSelected ? "selected" : ""}`}
+                            className={`min-h-10 rounded-lg border p-2 text-left ${isCurrentMonth ? "border-[#45536a] bg-[#212836]" : "border-[#45536a]/50 bg-[#212836]/50 text-[#8792a4]"} ${isSelected ? "ring-2 ring-[#c9a227]" : ""}`}
                             onClick={() => setSelectedDate(dayKey)}
                           >
-                            <span className="month-day-number">{currentDate.getDate()}</span>
+                            <span className="font-semibold">{currentDate.getDate()}</span>
                           </button>
                         );
                       })}
@@ -575,7 +644,7 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                <div className="form-row double">
+                <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <label>
                     <span>Kezdés</span>
                     <input
@@ -598,14 +667,14 @@ export default function AdminPage() {
                   </label>
                 </div>
 
-                <div className="form-actions">
-                  <button type="submit" className="primary-button">
+                <div className="mt-3 flex flex-wrap gap-3">
+                  <button type="submit" className="rounded-lg bg-[#c9a227] px-4 py-2 font-bold text-[#1b1305] hover:opacity-90">
                     {editingEventId ? "Mentés" : "Létrehozás"}
                   </button>
                   {editingEventId && (
                     <button
                       type="button"
-                      className="secondary-button"
+                      className="rounded-lg border border-[#45536a] bg-[#1b212b] px-4 py-2 font-semibold text-[#f4f1e8] hover:opacity-90"
                       onClick={() => {
                         setEditingEventId(null);
                         setEventForm(defaultEventForm());
@@ -617,43 +686,44 @@ export default function AdminPage() {
                 </div>
               </form>
 
-              <section className="admin-panel">
-            <div className="admin-header">
-              <h3>Események listája</h3>
-              <span>{formatDateLong(selectedDate)}</span>
+              <section className="mt-2 rounded-xl border border-[#45536a] bg-[#1b212b] p-4">
+            <div className="mb-4 flex items-center justify-between gap-4 border-b border-[#45536a] pb-4">
+              <h3 className="m-0 font-serif text-xl">Események listája</h3>
+              <span className="text-sm text-[#c3cad5]">{formatDateLong(selectedDate)}</span>
             </div>
 
-            <div className="admin-lists">
-              <div className="admin-card list-card">
-                {events.length === 0 ? (
-                  <p className="empty-hint">Nincsenek események erre a napra.</p>
+            <div className="grid grid-cols-1 gap-4">
+              <div className="min-h-52 rounded-xl border border-[#45536a] bg-[#212836] p-4">
+                {filteredEvents.length === 0 ? (
+                  <p className="pt-6 text-center text-sm text-[#8792a4]">Nincsenek események erre a napra.</p>
                 ) : (
-                  <div className="list-items">
-                    {events.map((event) => {
+                  <div className="flex flex-col gap-3">
+                    {filteredEvents.map((event) => {
                       const canEdit =
                         currentUser.role === "SUPER_ADMIN" || event.createdBy.id === currentUser.id;
                       const canDelete =
                         currentUser.role === "SUPER_ADMIN" || event.createdBy.id === currentUser.id;
 
                       return (
-                        <div key={event.id} className="list-item">
-                          <div className="list-item-main">
-                            <div className="list-item-title">
-                              {event.title} <span>({event.category.name})</span>
+                        <div key={event.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#45536a] bg-[#1b212b] p-3">
+                          <div className="min-w-0">
+                            <div className="mb-1 flex flex-wrap items-center gap-2 font-bold">
+                              {event.title} <span>({(event.categories?.length ? event.categories : [event.category]).map((category) => category.name).join(", ")})</span>
                             </div>
-                            <div className="list-item-meta">
+                            <div className="text-sm text-[#c3cad5]">
                               {formatDateLong(event.startDateTime.slice(0, 10))} • {formatTime(event.startDateTime)} - {formatTime(event.endDateTime)} • {event.location}
                             </div>
-                            <div className="list-item-meta">
+                            <div className="text-sm text-[#c3cad5]">
                               Készítette: {event.createdBy.name} ({event.createdBy.role})
                             </div>
+                            {!!event.tags?.length && <div className="mt-2 flex flex-wrap gap-1">{event.tags.map((tag) => <span key={tag} className="rounded-full border px-2 py-0.5 text-xs">{tag}</span>)}</div>}
                           </div>
 
-                          <div className="list-item-actions">
+                          <div className="flex flex-wrap justify-end gap-2">
                             {canEdit && (
                               <button
                                 type="button"
-                                className="secondary-button"
+                                className="rounded-lg border border-[#45536a] bg-[#212836] px-3 py-2 text-sm font-semibold hover:opacity-90"
                                 onClick={() => handleEditEvent(event)}
                               >
                                 Szerkesztés
@@ -662,7 +732,7 @@ export default function AdminPage() {
                             {canDelete && (
                               <button
                                 type="button"
-                                className="danger-button"
+                                className="rounded-lg border border-red-400/50 bg-red-500/10 px-3 py-2 text-sm font-semibold text-red-100 hover:opacity-90"
                                 onClick={() => void handleDeleteEvent(event.id)}
                               >
                                 Törlés
@@ -677,30 +747,30 @@ export default function AdminPage() {
               </div>
 
               {canManageCategories && (
-                <div className="admin-card list-card">
-                  <h4>Kategóriák</h4>
+                <div className="min-h-52 rounded-xl border border-[#45536a] bg-[#212836] p-4">
+                  <h4 className="mb-4 font-serif text-lg">Kategóriák</h4>
 
-                  <div className="list-items">
+                  <div className="flex flex-col gap-3">
                     {categories.map((category) => (
-                      <div key={category.id} className="list-item">
-                        <div className="list-item-main">
-                          <div className="list-item-title">
-                            <span className="category-dot" style={{ backgroundColor: category.color }} />
+                      <div key={category.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#45536a] bg-[#1b212b] p-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 font-bold">
+                            <span className="h-3 w-3 rounded-full" style={{ backgroundColor: category.color }} />
                             {category.name}
                           </div>
                         </div>
 
-                        <div className="list-item-actions">
+                        <div className="flex flex-wrap justify-end gap-2">
                           <button
                             type="button"
-                            className="secondary-button"
+                            className="rounded-lg border border-[#45536a] bg-[#212836] px-3 py-2 text-sm font-semibold hover:opacity-90"
                             onClick={() => handleEditCategory(category)}
                           >
                             Szerkesztés
                           </button>
                           <button
                             type="button"
-                            className="danger-button"
+                            className="rounded-lg border border-red-400/50 bg-red-500/10 px-3 py-2 text-sm font-semibold text-red-100 hover:opacity-90"
                             onClick={() => void handleDeleteCategory(category.id)}
                           >
                             Törlés
@@ -715,10 +785,10 @@ export default function AdminPage() {
           </section>
 
               {canManageCategories && (
-                <form className="admin-card" onSubmit={handleCategorySubmit}>
-                  <h4>{editingCategoryId ? "Kategória szerkesztése" : "Kategória létrehozása"}</h4>
+                <form className="my-2 rounded-xl border border-[#45536a] bg-[#212836] p-5 [&_label]:flex [&_label]:flex-col [&_label]:gap-2 [&_label]:text-sm [&_label]:text-[#c3cad5]" onSubmit={handleCategorySubmit}>
+                  <h4 className="mb-4 font-serif text-xl">{editingCategoryId ? "Kategória szerkesztése" : "Kategória létrehozása"}</h4>
 
-                  <div className="form-row">
+                  <div className="mb-4 flex flex-col gap-2">
                     <label>
                       <span>Név</span>
                       <input
@@ -730,7 +800,7 @@ export default function AdminPage() {
                     </label>
                   </div>
 
-                  <div className="form-row">
+                  <div className="mb-4 flex flex-col gap-2">
                     <label>
                       <span>Színkód</span>
                       <input
@@ -743,14 +813,14 @@ export default function AdminPage() {
                     </label>
                   </div>
 
-                  <div className="form-actions">
-                    <button type="submit" className="primary-button">
+                  <div className="mt-3 flex flex-wrap gap-3">
+                    <button type="submit" className="rounded-lg bg-[#c9a227] px-4 py-2 font-bold text-[#1b1305] hover:opacity-90">
                       {editingCategoryId ? "Mentés" : "Létrehozás"}
                     </button>
                     {editingCategoryId && (
                       <button
                         type="button"
-                        className="secondary-button"
+                        className="rounded-lg border border-[#45536a] bg-[#1b212b] px-4 py-2 font-semibold text-[#f4f1e8] hover:opacity-90"
                         onClick={() => {
                           setEditingCategoryId(null);
                           setCategoryForm(defaultCategoryForm);
@@ -764,10 +834,10 @@ export default function AdminPage() {
               )}
 
               {canManageUsers && (
-                <form className="admin-card" onSubmit={handleCreateAdmin}>
-                  <h4>Admin fiók létrehozása</h4>
+                <form className="my-2 rounded-xl border border-[#45536a] bg-[#212836] p-5 [&_label]:flex [&_label]:flex-col [&_label]:gap-2 [&_label]:text-sm [&_label]:text-[#c3cad5]" onSubmit={handleCreateAdmin}>
+                  <h4 className="mb-4 font-serif text-xl">Admin fiók létrehozása</h4>
 
-                  <div className="form-row">
+                  <div className="mb-4 flex flex-col gap-2">
                     <label>
                       <span>Felhasználónév</span>
                       <input
@@ -779,7 +849,7 @@ export default function AdminPage() {
                     </label>
                   </div>
 
-                  <div className="form-row">
+                  <div className="mb-4 flex flex-col gap-2">
                     <label>
                       <span>Név</span>
                       <input
@@ -791,7 +861,7 @@ export default function AdminPage() {
                     </label>
                   </div>
 
-                  <div className="form-row">
+                  <div className="mb-4 flex flex-col gap-2">
                     <label>
                       <span>Jelszó</span>
                       <input
@@ -804,8 +874,8 @@ export default function AdminPage() {
                     </label>
                   </div>
 
-                  <div className="form-actions">
-                    <button type="submit" className="primary-button">
+                  <div className="mt-3 flex flex-wrap gap-3">
+                    <button type="submit" className="rounded-lg bg-[#c9a227] px-4 py-2 font-bold text-[#1b1305] hover:opacity-90">
                       Létrehozás
                     </button>
                   </div>

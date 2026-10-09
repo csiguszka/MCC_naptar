@@ -1,17 +1,19 @@
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/app/lib/auth";
 import { prisma } from "@/app/lib/prisma";
+import { Prisma } from "@/app/generated/prisma/client";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const category = searchParams.get("category") ?? "all";
+  const tag = searchParams.get("tag")?.trim();
   const view = searchParams.get("view") ?? "display";
   const dateParam = searchParams.get("date") ?? new Date().toISOString().slice(0, 10);
 
   const startOfDay = new Date(`${dateParam}T00:00:00`);
   const endOfDay = new Date(`${dateParam}T23:59:59.999`);
 
-  const filter: Record<string, unknown> = {
+  const filter: Prisma.EventWhereInput = {
     startDateTime: {
       gte: startOfDay,
       lte: endOfDay,
@@ -19,15 +21,21 @@ export async function GET(request: Request) {
   };
 
   if (category !== "all") {
-    filter.category = {
-      name: category,
-    };
+    filter.OR = [
+      { category: { name: category } },
+      { categories: { some: { name: category } } },
+    ];
+  }
+
+  if (tag) {
+    filter.tags = { has: tag };
   }
 
   const events = await prisma.event.findMany({
     where: filter,
     include: {
       category: true,
+      categories: true,
       createdBy: {
         select: {
           id: true,
@@ -70,13 +78,28 @@ export async function POST(request: Request) {
     const title = String(body.title ?? "").trim();
     const location = String(body.location ?? "").trim();
     const categoryName = String(body.category ?? "").trim();
+    const requestedCategoryIds: number[] = Array.isArray(body.categoryIds)
+      ? (body.categoryIds as unknown[]).reduce<number[]>((ids, categoryId) => {
+          const parsedId = Number(categoryId);
+          if (Number.isInteger(parsedId) && !ids.includes(parsedId)) ids.push(parsedId);
+          return ids;
+        }, [])
+      : [];
+    const rawTags: unknown[] = Array.isArray(body.tags)
+      ? body.tags as unknown[]
+      : String(body.tags ?? "").split(",");
+    const tags = rawTags.reduce<string[]>((items, tag) => {
+      const normalizedTag = String(tag).trim();
+      if (normalizedTag && !items.includes(normalizedTag)) items.push(normalizedTag);
+      return items;
+    }, []);
     const startDateTime = new Date(body.startDateTime);
     const endDateTime = new Date(body.endDateTime);
 
     if (
       !title ||
       !location ||
-      !categoryName ||
+      (!categoryName && requestedCategoryIds.length === 0) ||
       Number.isNaN(startDateTime.getTime()) ||
       Number.isNaN(endDateTime.getTime())
     ) {
@@ -102,14 +125,20 @@ export async function POST(request: Request) {
       );
     }
 
-    const category = await prisma.category.findUnique({ where: { name: categoryName } });
+    const categories = requestedCategoryIds.length > 0
+      ? await prisma.category.findMany({ where: { id: { in: requestedCategoryIds } } })
+      : await prisma.category.findMany({ where: { name: categoryName } });
 
-    if (!category) {
+    if (categories.length === 0 || categories.length !== (requestedCategoryIds.length || 1)) {
       return NextResponse.json(
-        { error: "A kategória nem található." },
+        { error: "Egy vagy több kategória nem található." },
         { status: 400 },
       );
     }
+
+    const orderedCategories = requestedCategoryIds.length > 0
+      ? requestedCategoryIds.map((id: number) => categories.find((item) => item.id === id)!)
+      : categories;
 
     const event = await prisma.event.create({
       data: {
@@ -117,11 +146,14 @@ export async function POST(request: Request) {
         location,
         startDateTime,
         endDateTime,
-        categoryId: category.id,
+        categoryId: orderedCategories[0].id,
+        categories: { connect: orderedCategories.map((item) => ({ id: item.id })) },
+        tags,
         createdById: user.id,
       },
       include: {
         category: true,
+        categories: true,
         createdBy: {
           select: {
             id: true,

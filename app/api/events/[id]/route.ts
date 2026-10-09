@@ -42,16 +42,48 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     const categoryName = body.category ? String(body.category).trim() : undefined;
-    const category = categoryName
-      ? await prisma.category.findUnique({ where: { name: categoryName } })
-      : null;
+    let categoryIds: number[] | undefined;
 
-    if (categoryName && !category) {
-      return NextResponse.json(
-        { error: "A kategória nem található." },
-        { status: 400 },
-      );
+    if (Array.isArray(body.categoryIds)) {
+      const rawCategoryIds = body.categoryIds as unknown[];
+      const parsedCategoryIds = rawCategoryIds.reduce<number[]>((ids, categoryId) => {
+        const parsedId = Number(categoryId);
+        if (Number.isInteger(parsedId)) ids.push(parsedId);
+        return ids;
+      }, []);
+      categoryIds = [...new Set(parsedCategoryIds)];
+
+      const categories = await prisma.category.findMany({
+        where: { id: { in: categoryIds } },
+      });
+
+      if (categoryIds.length === 0 || categories.length !== categoryIds.length) {
+        return NextResponse.json(
+          { error: "Egy vagy több kategória nem található." },
+          { status: 400 },
+        );
+      }
+    } else if (categoryName) {
+      const category = await prisma.category.findUnique({ where: { name: categoryName } });
+
+      if (!category) {
+        return NextResponse.json(
+          { error: "A kategória nem található." },
+          { status: 400 },
+        );
+      }
+
+      categoryIds = [category.id];
     }
+
+    const tags: string[] | undefined = body.tags === undefined
+      ? undefined
+      : (Array.isArray(body.tags) ? body.tags as unknown[] : String(body.tags).split(","))
+        .reduce<string[]>((items, tag) => {
+          const normalizedTag = String(tag).trim();
+          if (normalizedTag && !items.includes(normalizedTag)) items.push(normalizedTag);
+          return items;
+        }, []);
 
     const hasStart = body.startDateTime !== undefined && body.startDateTime !== null && body.startDateTime !== "";
     const hasEnd = body.endDateTime !== undefined && body.endDateTime !== null && body.endDateTime !== "";
@@ -91,10 +123,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         location: body.location ? String(body.location).trim() : undefined,
         startDateTime: hasStart ? new Date(body.startDateTime) : undefined,
         endDateTime: hasEnd ? new Date(body.endDateTime) : undefined,
-        categoryId: category ? category.id : undefined,
+        categoryId: categoryIds?.[0],
+        categories: categoryIds
+          ? { set: categoryIds.map((categoryId) => ({ id: categoryId })) }
+          : undefined,
+        tags,
       },
       include: {
         category: true,
+        categories: true,
         createdBy: {
           select: {
             id: true,
