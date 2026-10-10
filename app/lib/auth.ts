@@ -3,7 +3,7 @@ import { randomBytes, createHash } from "node:crypto";
 export type UserRole = "SUPER_ADMIN" | "ADMIN";
 
 export type SessionUser = {
-  id: number;
+  id: string;
   username: string;
   name: string;
   role: UserRole;

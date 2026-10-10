@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/app/lib/auth";
 import { prisma } from "@/app/lib/prisma";
+import { isObjectId } from "@/app/lib/object-id";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = getSessionFromRequest(request);
@@ -10,9 +11,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   const { id } = await params;
-  const numericId = Number(id);
-
-  if (!Number.isInteger(numericId)) {
+  if (!isObjectId(id)) {
     return NextResponse.json({ error: "Érvénytelen kategória azonosító." }, { status: 400 });
   }
 
@@ -26,7 +25,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     const category = await prisma.category.update({
-      where: { id: numericId },
+      where: { id },
       data: { name, color },
     });
 
@@ -44,14 +43,12 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   }
 
   const { id } = await params;
-  const numericId = Number(id);
-
-  if (!Number.isInteger(numericId)) {
+  if (!isObjectId(id)) {
     return NextResponse.json({ error: "Érvénytelen kategória azonosító." }, { status: 400 });
   }
 
   try {
-    await prisma.category.delete({ where: { id: numericId } });
+    await prisma.category.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch {
     return NextResponse.json({ error: "Nem sikerült törölni a kategóriát." }, { status: 500 });

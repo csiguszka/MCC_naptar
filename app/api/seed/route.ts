@@ -28,7 +28,7 @@ export async function POST() {
       await prisma.category.create({
         data: {
           ...category,
-          createdById: defaultUser.id,
+          createdBy: { connect: { id: defaultUser.id } },
         },
       });
     }

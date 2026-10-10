@@ -4,13 +4,13 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 type CategoryItem = {
-  id: number;
+  id: string;
   name: string;
   color: string;
 };
 
 type EventItem = {
-  id: number;
+  id: string;
   title: string;
   location: string;
   startDateTime: string;
@@ -19,7 +19,7 @@ type EventItem = {
   categories: CategoryItem[];
   tags: string[];
   createdBy: {
-    id: number;
+    id: string;
     role: string;
     name: string;
     username: string;
@@ -27,7 +27,7 @@ type EventItem = {
 };
 
 type SessionUser = {
-  id: number;
+  id: string;
   username: string;
   name: string;
   role: "SUPER_ADMIN" | "ADMIN";
@@ -41,7 +41,7 @@ type MessageState = {
 type EventFormState = {
   title: string;
   location: string;
-  categoryIds: number[];
+  categoryIds: string[];
   tags: string;
   startTime: string;
   endTime: string;
@@ -150,8 +150,8 @@ export default function AdminPage() {
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedTag, setSelectedTag] = useState("all");
   const [showLogin, setShowLogin] = useState(false);
-  const [editingEventId, setEditingEventId] = useState<number | null>(null);
-  const [editingCategoryId, setEditingCategoryId] = useState<number | null>(null);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [eventForm, setEventForm] = useState<EventFormState>(defaultEventForm());
   const [categoryForm, setCategoryForm] = useState(defaultCategoryForm);
   const [loginForm, setLoginForm] = useState(defaultLoginForm);
@@ -160,6 +160,22 @@ export default function AdminPage() {
 
   const canManageCategories = currentUser?.role === "SUPER_ADMIN";
   const canManageUsers = currentUser?.role === "SUPER_ADMIN";
+
+  const loadCurrentUser = async () => {
+    const response = await fetch("/api/users/me", { cache: "no-store" });
+    const data = (await response.json()) as { user: SessionUser | null };
+    setCurrentUser(data.user);
+
+    if (!data.user) {
+      setShowLogin(true);
+    }
+  };
+
+  const loadCategories = async () => {
+    const response = await fetch("/api/categories", { cache: "no-store" });
+    const loadedCategories = (await response.json()) as CategoryItem[];
+    setCategories(loadedCategories);
+  };
 
   useEffect(() => {
     void loadCurrentUser();
@@ -187,22 +203,6 @@ export default function AdminPage() {
       void loadEvents();
     }
   }, [currentUser, selectedDate]);
-
-  const loadCurrentUser = async () => {
-    const response = await fetch("/api/users/me", { cache: "no-store" });
-    const data = (await response.json()) as { user: SessionUser | null };
-    setCurrentUser(data.user);
-
-    if (!data.user) {
-      setShowLogin(true);
-    }
-  };
-
-  const loadCategories = async () => {
-    const response = await fetch("/api/categories", { cache: "no-store" });
-    const loadedCategories = (await response.json()) as CategoryItem[];
-    setCategories(loadedCategories);
-  };
 
   const loadEvents = async () => {
     const params = new URLSearchParams({
@@ -285,7 +285,7 @@ export default function AdminPage() {
     await loadCategories();
   };
 
-  const handleDeleteCategory = async (categoryId: number) => {
+  const handleDeleteCategory = async (categoryId: string) => {
     const response = await fetch(`/api/categories/${categoryId}`, {
       method: "DELETE",
     });
@@ -381,7 +381,7 @@ export default function AdminPage() {
     await loadEvents();
   };
 
-  const handleDeleteEvent = async (eventId: number) => {
+  const handleDeleteEvent = async (eventId: string) => {
     const response = await fetch(`/api/events/${eventId}`, {
       method: "DELETE",
     });

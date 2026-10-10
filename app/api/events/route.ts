@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/app/lib/auth";
 import { prisma } from "@/app/lib/prisma";
-import { Prisma } from "@/app/generated/prisma/client";
+import { isObjectId } from "@/app/lib/object-id";
+import { Prisma } from "@prisma/client";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -78,10 +79,9 @@ export async function POST(request: Request) {
     const title = String(body.title ?? "").trim();
     const location = String(body.location ?? "").trim();
     const categoryName = String(body.category ?? "").trim();
-    const requestedCategoryIds: number[] = Array.isArray(body.categoryIds)
-      ? (body.categoryIds as unknown[]).reduce<number[]>((ids, categoryId) => {
-          const parsedId = Number(categoryId);
-          if (Number.isInteger(parsedId) && !ids.includes(parsedId)) ids.push(parsedId);
+    const requestedCategoryIds: string[] = Array.isArray(body.categoryIds)
+      ? (body.categoryIds as unknown[]).reduce<string[]>((ids, categoryId) => {
+          if (isObjectId(categoryId) && !ids.includes(categoryId)) ids.push(categoryId);
           return ids;
         }, [])
       : [];
@@ -137,7 +137,7 @@ export async function POST(request: Request) {
     }
 
     const orderedCategories = requestedCategoryIds.length > 0
-      ? requestedCategoryIds.map((id: number) => categories.find((item) => item.id === id)!)
+      ? requestedCategoryIds.map((id: string) => categories.find((item) => item.id === id)!)
       : categories;
 
     const event = await prisma.event.create({
@@ -146,10 +146,10 @@ export async function POST(request: Request) {
         location,
         startDateTime,
         endDateTime,
-        categoryId: orderedCategories[0].id,
+        category: { connect: { id: orderedCategories[0].id } },
         categories: { connect: orderedCategories.map((item) => ({ id: item.id })) },
         tags,
-        createdById: user.id,
+        createdBy: { connect: { id: user.id } },
       },
       include: {
         category: true,

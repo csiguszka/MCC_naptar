@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/app/lib/auth";
 import { prisma } from "@/app/lib/prisma";
+import { isObjectId } from "@/app/lib/object-id";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = getSessionFromRequest(request);
@@ -16,16 +17,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   try {
     const body = await request.json();
-    const numericId = Number(id);
-
-    if (!Number.isInteger(numericId)) {
+    if (!isObjectId(id)) {
       return NextResponse.json(
         { error: "Érvénytelen esemény azonosító." },
         { status: 400 },
       );
     }
 
-    const existing = await prisma.event.findUnique({ where: { id: numericId } });
+    const existing = await prisma.event.findUnique({ where: { id } });
 
     if (!existing) {
       return NextResponse.json(
@@ -42,13 +41,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     const categoryName = body.category ? String(body.category).trim() : undefined;
-    let categoryIds: number[] | undefined;
+    let categoryIds: string[] | undefined;
 
     if (Array.isArray(body.categoryIds)) {
       const rawCategoryIds = body.categoryIds as unknown[];
-      const parsedCategoryIds = rawCategoryIds.reduce<number[]>((ids, categoryId) => {
-        const parsedId = Number(categoryId);
-        if (Number.isInteger(parsedId)) ids.push(parsedId);
+      const parsedCategoryIds = rawCategoryIds.reduce<string[]>((ids, categoryId) => {
+        if (isObjectId(categoryId)) ids.push(categoryId);
         return ids;
       }, []);
       categoryIds = [...new Set(parsedCategoryIds)];
@@ -117,13 +115,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     const updated = await prisma.event.update({
-      where: { id: numericId },
+      where: { id },
       data: {
         title: body.title ? String(body.title).trim() : undefined,
         location: body.location ? String(body.location).trim() : undefined,
         startDateTime: hasStart ? new Date(body.startDateTime) : undefined,
         endDateTime: hasEnd ? new Date(body.endDateTime) : undefined,
-        categoryId: categoryIds?.[0],
+        category: categoryIds ? { connect: { id: categoryIds[0] } } : undefined,
         categories: categoryIds
           ? { set: categoryIds.map((categoryId) => ({ id: categoryId })) }
           : undefined,
@@ -165,16 +163,14 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const { id } = await params;
 
   try {
-    const numericId = Number(id);
-
-    if (!Number.isInteger(numericId)) {
+    if (!isObjectId(id)) {
       return NextResponse.json(
         { error: "Érvénytelen esemény azonosító." },
         { status: 400 },
       );
     }
 
-    const existing = await prisma.event.findUnique({ where: { id: numericId } });
+    const existing = await prisma.event.findUnique({ where: { id } });
 
     if (!existing) {
       return NextResponse.json(
@@ -190,7 +186,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       );
     }
 
-    await prisma.event.delete({ where: { id: numericId } });
+    await prisma.event.delete({ where: { id } });
 
     return NextResponse.json({ success: true });
   } catch (error) {

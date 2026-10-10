@@ -61,7 +61,7 @@ export async function POST(request: Request) {
       data: {
         name,
         color,
-        createdById: user.id,
+        createdBy: { connect: { id: user.id } },
       },
     });
 

@@ -3,13 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 
 type CategoryItem = {
-  id: number;
+  id: string;
   name: string;
   color: string;
 };
 
 type EventItem = {
-  id: number;
+  id: string;
   title: string;
   location: string;
   startDateTime: string;
@@ -18,7 +18,7 @@ type EventItem = {
   categories: CategoryItem[];
   tags: string[];
   createdBy: {
-    id: number;
+    id: string;
     role: string;
     name: string;
     username: string;
@@ -26,7 +26,7 @@ type EventItem = {
 };
 
 type SessionUser = {
-  id: number;
+  id: string;
   username: string;
   name: string;
   role: "SUPER_ADMIN" | "ADMIN";
@@ -149,13 +149,25 @@ export default function Home() {
   });
   const [currentUser, setCurrentUser] = useState<SessionUser | null>(null);
   const [showLogin, setShowLogin] = useState(false);
-  const [editingEventId, setEditingEventId] = useState<number | null>(null);
-  const [editingCategoryId, setEditingCategoryId] = useState<number | null>(null);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [eventForm, setEventForm] = useState(defaultEventForm);
   const [categoryForm, setCategoryForm] = useState(defaultCategoryForm);
   const [loginForm, setLoginForm] = useState(defaultLoginForm);
   const [adminForm, setAdminForm] = useState(defaultAdminForm);
   const [statusMessage, setStatusMessage] = useState<MessageState | null>(null);
+
+  const loadCurrentUser = async () => {
+    const response = await fetch("/api/users/me", { cache: "no-store" });
+    const data = (await response.json()) as { user: SessionUser | null };
+    setCurrentUser(data.user);
+  };
+
+  const loadCategories = async () => {
+    const response = await fetch("/api/categories", { cache: "no-store" });
+    const loadedCategories = (await response.json()) as CategoryItem[];
+    setCategories(loadedCategories);
+  };
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -249,18 +261,6 @@ export default function Home() {
 
     return () => window.clearInterval(intervalId);
   }, [events, view]);
-
-  const loadCurrentUser = async () => {
-    const response = await fetch("/api/users/me", { cache: "no-store" });
-    const data = (await response.json()) as { user: SessionUser | null };
-    setCurrentUser(data.user);
-  };
-
-  const loadCategories = async () => {
-    const response = await fetch("/api/categories", { cache: "no-store" });
-    const loadedCategories = (await response.json()) as CategoryItem[];
-    setCategories(loadedCategories);
-  };
 
   const weekDays = useMemo(() => {
     const start = getStartOfWeek(selectedDate);
@@ -391,7 +391,7 @@ export default function Home() {
     await loadCategories();
   };
 
-  const handleDeleteCategory = async (categoryId: number) => {
+  const handleDeleteCategory = async (categoryId: string) => {
     const response = await fetch(`/api/categories/${categoryId}`, {
       method: "DELETE",
     });
