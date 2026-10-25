@@ -7,8 +7,8 @@ type CategoryItem = {
   id: string;
   name: string;
   color: string;
-};
-
+}; 
+ 
 type EventItem = {
   id: string;
   title: string;
