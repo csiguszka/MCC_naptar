@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { btnIcon, btnPrimary, btnSecondary, cardCls, inputCls, labelCls, navCls } from "./ui";
 
 type CategoryItem = {
   id: string;
@@ -78,6 +79,12 @@ const formatDateLong = (value: string) =>
     day: "numeric",
   }).format(new Date(value));
 
+const formatDayMonth = (value: string) =>
+  new Intl.DateTimeFormat("hu-HU", {
+    month: "short",
+    day: "numeric",
+  }).format(new Date(`${value}T12:00:00`));
+
 const toInputDate = (date: Date) => {
   const year = date.getFullYear();
   const month = `${date.getMonth() + 1}`.padStart(2, "0");
@@ -141,6 +148,8 @@ export default function Home() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [currentPage, setCurrentPage] = useState(0);
   const [currentTime, setCurrentTime] = useState(new Date());
+  // Telefonon/tableten nincs automatikus lapozás, az összes esemény görgethető listában látszik.
+  const [isCompact, setIsCompact] = useState(false);
   const [showTopBar, setShowTopBar] = useState(() => {
     if (typeof window === "undefined") return true;
 
@@ -175,6 +184,15 @@ export default function Home() {
     }, 1000);
 
     return () => window.clearInterval(intervalId);
+  }, []);
+
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 1023px)");
+    const update = () => setIsCompact(query.matches);
+    update();
+    query.addEventListener("change", update);
+
+    return () => query.removeEventListener("change", update);
   }, []);
 
   useEffect(() => {
@@ -245,7 +263,7 @@ export default function Home() {
   }, [view, selectedCategory, selectedDate]);
 
   useEffect(() => {
-    if (view !== "display") {
+    if (view !== "display" || isCompact) {
       return;
     }
 
@@ -260,7 +278,7 @@ export default function Home() {
     }, PAGE_SWITCH_MS);
 
     return () => window.clearInterval(intervalId);
-  }, [events, view]);
+  }, [events, view, isCompact]);
 
   const weekDays = useMemo(() => {
     const start = getStartOfWeek(selectedDate);
@@ -306,7 +324,7 @@ export default function Home() {
     return map;
   }, [visibleEvents]);
   const displayPages = useMemo(() => chunkArray(visibleEvents, ITEMS_PER_PAGE), [visibleEvents]);
-  const currentDisplayPage = displayPages[currentPage] ?? [];
+  const currentDisplayPage = isCompact ? visibleEvents : (displayPages[currentPage] ?? []);
 
   const canManageCategories = currentUser?.role === "SUPER_ADMIN";
   const canManageUsers = currentUser?.role === "SUPER_ADMIN";
@@ -474,103 +492,157 @@ export default function Home() {
     setCategoryForm({ name: category.name, color: category.color });
   };
 
+  const shiftDate = (days: number) => {
+    const next = new Date(`${selectedDate}T12:00:00`);
+    next.setDate(next.getDate() + days);
+    setSelectedDate(toInputDate(next));
+  };
+
+  const dateStep = view === "week" ? 7 : 1;
+  const dateLabel =
+    view === "week"
+      ? `${formatDayMonth(weekDays[0])} – ${formatDayMonth(weekDays[6])}`
+      : formatDateLong(`${selectedDate}T12:00:00`);
+  const isToday = view === "week" ? weekDays.includes(today) : selectedDate === today;
+
+  const getEventCategories = (event: EventItem) =>
+    event.categories?.length ? event.categories : [event.category];
+
   return (
-    <main className="min-h-screen bg-[#24334a] p-4 text-[#f4f1e8] md:p-6">
+    <main className="min-h-screen bg-[#24334a] p-3 text-[#f4f1e8] sm:p-4 md:p-6">
       {showTopBar && (
-        <div className="mb-6 flex flex-col items-stretch justify-between gap-5 xl:flex-row xl:items-center">
+        <nav className={navCls} aria-label="Főmenü">
           <div className="flex flex-wrap items-center gap-3">
-            <label className="flex items-center gap-3 rounded-xl border border-[#45536a] bg-[#1b212b] px-4 py-2 text-sm text-[#c3cad5]">
-              <span>Kategória</span>
-              <select
-                className="rounded-lg border border-[#45536a] bg-[#212836] px-3 py-2 text-[#f4f1e8]"
-              value={selectedCategory}
-              onChange={(event) => setSelectedCategory(event.target.value)}
-              >
-                <option value="all">Összes</option>
-                {categories.map((category) => (
-                  <option key={category.id} value={category.name}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="flex items-center gap-3 rounded-xl border border-[#45536a] bg-[#1b212b] px-4 py-2 text-sm text-[#c3cad5]">
-              <span>Címke</span>
-              <select
-                className="rounded-lg border border-[#45536a] bg-[#212836] px-3 py-2 text-[#f4f1e8]"
-                value={selectedTag}
-                onChange={(event) => setSelectedTag(event.target.value)}
-              >
-                <option value="all">Összes</option>
-                {availableTags.map((tag) => <option key={tag} value={tag}>{tag}</option>)}
-              </select>
-            </label>
-
-          <div className="inline-flex gap-1 rounded-xl border border-[#45536a] bg-[#1b212b] p-1" aria-label="Nézetváltás">
-            <button
-              type="button"
-              className={`rounded-lg px-4 py-2 font-semibold ${view === "display" ? "bg-[#c9a227] text-[#1b1305]" : "text-[#c3cad5] hover:bg-[#212836]"}`}
-              onClick={() => setView("display")}
+            <div
+              className="flex w-full gap-1 rounded-xl border border-[#45536a] bg-[#212836] p-1 lg:w-auto"
+              role="tablist"
+              aria-label="Nézetváltás"
             >
-              Napi kijelző
-            </button>
-            <button
-              type="button"
-              className={`rounded-lg px-4 py-2 font-semibold ${view === "week" ? "bg-[#c9a227] text-[#1b1305]" : "text-[#c3cad5] hover:bg-[#212836]"}`}
-              onClick={() => setView("week")}
-            >
-              Heti
-            </button>
-          </div>
-
-
-            {currentUser ? (
-              <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[#45536a] bg-[#1b212b] px-3 py-2 text-[#c3cad5]">
-                <span className="px-1">
-                  {currentUser.name} ({currentUser.role})
-                </span>
-                <a href="/admin" className="inline-flex items-center justify-center rounded-lg border border-[#45536a] bg-[#212836] px-4 py-2 font-bold text-[#f4f1e8] no-underline hover:opacity-90">
-                  Admin oldal
-                </a>
-                <button type="button" className="rounded-lg bg-[#c9a227] px-4 py-2 font-bold text-[#1b1305] hover:opacity-90" onClick={handleLogout}>
-                  Kijelentkezés
+              {([
+                ["display", "Napi nézet"],
+                ["week", "Heti nézet"],
+              ] as const).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  role="tab"
+                  aria-selected={view === key}
+                  className={`min-h-10 flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition lg:flex-none lg:text-base ${view === key ? "bg-[#c9a227] text-[#1b1305]" : "text-[#c3cad5] hover:bg-[#2b3445]"}`}
+                  onClick={() => setView(key)}
+                >
+                  {label}
                 </button>
-              </div>
-            ) : (
-              <button type="button" className="rounded-lg bg-[#c9a227] px-4 py-2 font-bold text-[#1b1305] hover:opacity-90" onClick={() => setShowLogin(true)}>
-                Bejelentkezés
-              </button>
-            )}
-          </div>
+              ))}
+            </div>
 
-        </div>
+            <div className="flex w-full items-center gap-2 lg:w-auto">
+              <button type="button" className={btnIcon} aria-label="Előző" onClick={() => shiftDate(-dateStep)}>
+                ←
+              </button>
+              <div className="min-w-0 flex-1 truncate text-center text-sm font-semibold lg:w-56 lg:flex-none">
+                {dateLabel}
+              </div>
+              <button type="button" className={btnIcon} aria-label="Következő" onClick={() => shiftDate(dateStep)}>
+                →
+              </button>
+              <button
+                type="button"
+                className={`${btnSecondary} px-3!`}
+                disabled={isToday}
+                onClick={() => setSelectedDate(today)}
+              >
+                Ma
+              </button>
+            </div>
+
+            <div className="grid w-full grid-cols-2 gap-2 lg:flex lg:w-auto">
+              <label className="flex flex-col gap-1 text-xs font-medium text-[#c3cad5]">
+                Kategória
+                <select
+                  className={`${inputCls} lg:w-44`}
+                  value={selectedCategory}
+                  onChange={(event) => setSelectedCategory(event.target.value)}
+                >
+                  <option value="all">Összes</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.name}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="flex flex-col gap-1 text-xs font-medium text-[#c3cad5]">
+                Címke
+                <select
+                  className={`${inputCls} lg:w-44`}
+                  value={selectedTag}
+                  onChange={(event) => setSelectedTag(event.target.value)}
+                >
+                  <option value="all">Összes</option>
+                  {availableTags.map((tag) => (
+                    <option key={tag} value={tag}>
+                      {tag}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="flex w-full flex-wrap items-center gap-2 lg:ml-auto lg:w-auto">
+              {currentUser ? (
+                <>
+                  <span className="w-full truncate text-sm text-[#c3cad5] lg:w-auto lg:max-w-48">
+                    {currentUser.name}
+                  </span>
+                  <a href="/admin" className={`${btnSecondary} flex-1 lg:flex-none`}>
+                    Admin oldal
+                  </a>
+                  <button type="button" className={`${btnPrimary} flex-1 lg:flex-none`} onClick={handleLogout}>
+                    Kijelentkezés
+                  </button>
+                </>
+              ) : (
+                <button type="button" className={`${btnPrimary} w-full lg:w-auto`} onClick={() => setShowLogin(true)}>
+                  Bejelentkezés
+                </button>
+              )}
+            </div>
+          </div>
+        </nav>
       )}
+
       {statusMessage && (
-          <div
-            role={statusMessage.type === "error" ? "alert" : "status"}
-            aria-live={statusMessage.type === "error" ? "assertive" : "polite"}
-            className={`fixed left-1/2 top-4 z-[100] flex w-[calc(100%-2rem)] max-w-md -translate-x-1/2 items-start justify-between gap-4 rounded-xl border px-4 py-3 shadow-2xl backdrop-blur ${statusMessage.type === "success" ? "border-green-500/40 bg-[#1b212b]/95 text-green-100" : "border-red-400/40 bg-[#1b212b]/95 text-red-100"}`}
+        <div
+          role={statusMessage.type === "error" ? "alert" : "status"}
+          aria-live={statusMessage.type === "error" ? "assertive" : "polite"}
+          className={`fixed left-1/2 top-4 z-[100] flex w-[calc(100%-2rem)] max-w-md -translate-x-1/2 items-start justify-between gap-4 rounded-xl border px-4 py-3 shadow-2xl backdrop-blur ${statusMessage.type === "success" ? "border-green-500/40 bg-[#1b212b]/95 text-green-100" : "border-red-400/40 bg-[#1b212b]/95 text-red-100"}`}
+        >
+          <span>{statusMessage.text}</span>
+          <button
+            type="button"
+            aria-label="Visszajelzés bezárása"
+            className="shrink-0 rounded px-1 text-lg leading-5 opacity-75 hover:opacity-100"
+            onClick={() => setStatusMessage(null)}
           >
-            <span>{statusMessage.text}</span>
-            <button
-              type="button"
-              aria-label="Visszajelzés bezárása"
-              className="shrink-0 rounded px-1 text-lg leading-5 opacity-75 hover:opacity-100"
-              onClick={() => setStatusMessage(null)}
-            >
-              ×
-            </button>
+            ×
+          </button>
         </div>
       )}
 
       {view === "display" && (
-        <section className="flex min-h-[calc(100vh-3rem)] flex-col overflow-hidden rounded-3xl bg-[#24334a]">
-          <header className="flex items-start justify-between gap-8 px-4 py-5 md:px-8">
-            <img src="https://www.ojim.fr/wp-content/uploads/2024/11/mcc-budapest.jpg" alt="MCC" className="h-20 w-auto object-contain md:h-28" />
+        <section className="flex flex-col overflow-hidden rounded-2xl bg-[#24334a] lg:min-h-[calc(100vh-3rem)] lg:rounded-3xl">
+          <header className="flex flex-wrap items-center justify-between gap-x-8 gap-y-3 px-1 py-3 sm:px-4 sm:py-5 md:px-8">
+            <img
+              src="https://www.ojim.fr/wp-content/uploads/2024/11/mcc-budapest.jpg"
+              alt="MCC"
+              className="h-12 w-auto object-contain sm:h-20 md:h-28"
+            />
             <div className="text-right">
-              <div className="text-4xl font-semibold text-white">{formatDateLong(selectedDate)}</div>
-              <div className="mt-2 whitespace-nowrap font-serif text-6xl font-semibold leading-none">
+              <div className="text-base font-semibold text-white sm:text-2xl xl:text-4xl">
+                {formatDateLong(selectedDate)}
+              </div>
+              <div className="mt-1 whitespace-nowrap font-serif text-3xl font-semibold leading-none sm:mt-2 sm:text-5xl xl:text-6xl">
                 {currentTime.toLocaleTimeString("hu-HU", {
                   hour: "2-digit",
                   minute: "2-digit",
@@ -580,37 +652,56 @@ export default function Home() {
             </div>
           </header>
 
-          <div className="flex grow flex-col justify-center px-4 py-6 md:px-14">
+          <div className="flex grow flex-col justify-center px-1 py-3 sm:px-4 sm:py-6 md:px-14">
             {currentDisplayPage.length === 0 ? (
-              <div className="m-auto text-center font-serif text-3xl text-[#aeb7c6] md:text-5xl">Nincs aktív esemény ehhez a naphoz.</div>
+              <div className="m-auto py-12 text-center font-serif text-xl text-[#aeb7c6] sm:text-3xl xl:text-5xl">
+                Nincs aktív esemény ehhez a naphoz.
+              </div>
             ) : (
-              <div className="grid gap-6">
+              <div className="grid gap-3 sm:gap-6">
                 {currentDisplayPage.map((event) => (
                   <article
                     key={event.id}
-                    className="grid min-h-32 grid-cols-1 items-center gap-4 rounded-xl border-l-[6px] bg-[#1b212b] px-6 py-5 lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:gap-8 lg:px-8"
-                    style={{ borderLeftColor: event.categories?.[0]?.color ?? event.category.color }}
+                    className="grid grid-cols-1 items-center gap-2 rounded-xl border-l-[6px] bg-[#1b212b] px-4 py-4 sm:gap-4 sm:px-6 sm:py-5 lg:min-h-32 lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:gap-8 lg:px-8"
+                    style={{ borderLeftColor: getEventCategories(event)[0].color }}
                   >
-                    <div className="whitespace-nowrap font-serif text-4xl font-semibold md:text-5xl">
+                    <div className="whitespace-nowrap font-serif text-xl font-semibold text-[#c3cad5] sm:text-3xl lg:text-white xl:text-5xl">
                       {formatTime(event.startDateTime)} - {formatTime(event.endDateTime)}
                     </div>
-                    <div>
-                      <div className="font-serif text-5xl font-semibold text-[#e3bd45]">{event.title}</div>
+                    <div className="min-w-0">
+                      <div className="break-words font-serif text-2xl font-semibold text-[#e3bd45] sm:text-3xl xl:text-5xl">
+                        {event.title}
+                      </div>
                       <div className="mt-2 flex flex-wrap gap-2">
-                        {(event.categories?.length ? event.categories : [event.category]).map((category) => (
-                          <span key={category.id} className="rounded-full px-3 py-1 text-sm font-bold text-[#101722]" style={{ backgroundColor: category.color }}>{category.name}</span>
+                        {getEventCategories(event).map((category) => (
+                          <span
+                            key={category.id}
+                            className="rounded-full px-3 py-1 text-xs font-bold text-[#101722] sm:text-sm"
+                            style={{ backgroundColor: category.color }}
+                          >
+                            {category.name}
+                          </span>
                         ))}
-                        {(event.tags ?? []).map((tag) => <span key={tag} className="rounded-full border border-[#718099] px-3 py-1 text-sm font-semibold text-[#dbe3ed]">{tag}</span>)}
+                        {(event.tags ?? []).map((tag) => (
+                          <span
+                            key={tag}
+                            className="rounded-full border border-[#718099] px-3 py-1 text-xs font-semibold text-[#dbe3ed] sm:text-sm"
+                          >
+                            {tag}
+                          </span>
+                        ))}
                       </div>
                     </div>
-                    <div className="text-left font-serif text-4xl font-semibold lg:text-right">{event.location}</div>
+                    <div className="break-words text-left font-serif text-lg font-semibold sm:text-2xl lg:text-right xl:text-4xl">
+                      {event.location}
+                    </div>
                   </article>
                 ))}
               </div>
             )}
           </div>
 
-          {displayPages.length > 1 && (
+          {!isCompact && displayPages.length > 1 && (
             <div className="flex justify-center gap-3 pb-6" aria-label="Lapszám">
               {displayPages.map((_, index) => (
                 <span
@@ -624,92 +715,111 @@ export default function Home() {
       )}
 
       {view === "week" && (
-        <section className="rounded-2xl border border-[#45536a] bg-[#1b212b]/90 p-5 md:p-6">
-          <div className="mb-5 flex items-center justify-between gap-5">
-            <button
-              type="button"
-              className="h-11 w-11 rounded-lg border border-[#45536a] bg-[#212836] text-xl text-[#f4f1e8]"
-              onClick={() => {
-                const next = new Date(`${selectedDate}T12:00:00`);
-                next.setDate(next.getDate() - 7);
-                setSelectedDate(toInputDate(next));
-              }}
-            >
-              ←
-            </button>
+        <section className={cardCls}>
+          <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
             <h2 className="m-0 font-serif text-2xl md:text-3xl">Heti nézet</h2>
-            <button
-              type="button"
-              className="h-11 w-11 rounded-lg border border-[#45536a] bg-[#212836] text-xl text-[#f4f1e8]"
-              onClick={() => {
-                const next = new Date(`${selectedDate}T12:00:00`);
-                next.setDate(next.getDate() + 7);
-                setSelectedDate(toInputDate(next));
-              }}
-            >
-              →
-            </button>
+            <span className="text-sm text-[#c3cad5]">
+              {formatDayMonth(weekDays[0])} – {formatDayMonth(weekDays[6])}
+            </span>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7">
-            {weekDays.map((dayKey) => (
-              <div key={dayKey} className="min-h-60 rounded-xl border border-[#45536a] bg-[#212836] p-3">
-                <div className="mb-3 flex items-center justify-between border-b border-[#45536a] pb-2 text-sm text-[#c3cad5]">
-                  <strong>
-                    {new Intl.DateTimeFormat("hu-HU", { weekday: "short" }).format(
-                      new Date(`${dayKey}T12:00:00`),
-                    )}
-                  </strong>
-                  <span>
-                    {new Intl.DateTimeFormat("hu-HU", {
-                      month: "numeric",
-                      day: "numeric",
-                    }).format(new Date(`${dayKey}T12:00:00`))}
-                  </span>
-                </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7">
+            {weekDays.map((dayKey) => {
+              const dayDate = new Date(`${dayKey}T12:00:00`);
+              const dayEvents = eventMap.get(dayKey) ?? [];
+              const isCurrentDay = dayKey === today;
 
-                <div className="flex flex-col gap-2">
-                  {(eventMap.get(dayKey) ?? []).length === 0 ? (
-                    <div className="pt-6 text-center text-sm text-[#8792a4]">Nincs esemény</div>
-                  ) : (
-                    (eventMap.get(dayKey) ?? []).map((event) => (
-                      <div
-                        key={event.id}
-                        className="rounded-lg border-l-4 p-2.5"
-                        style={{
-                          borderLeftColor: event.category.color,
-                          backgroundColor: `${event.category.color}22`,
-                        }}
-                      >
-                        <div className="text-xs text-[#c3cad5]">
-                          {formatTime(event.startDateTime)} - {formatTime(event.endDateTime)}
-                        </div>
-                        <div className="mt-1 font-bold">{event.title}</div>
-                        <div className="mt-1 text-sm text-[#c3cad5]">{event.location}</div>
-                        <div className="mt-2 flex flex-wrap gap-1">{(event.tags ?? []).map((tag) => <span key={tag} className="rounded-full border border-[#718099] px-2 py-0.5 text-xs text-[#dbe3ed]">{tag}</span>)}</div>
-                      </div>
-                    ))
-                  )}
+              return (
+                <div
+                  key={dayKey}
+                  className={`rounded-xl border bg-[#212836] p-3 md:min-h-60 ${isCurrentDay ? "border-[#c9a227] ring-1 ring-[#c9a227]/60" : "border-[#45536a]"}`}
+                >
+                  <div className="mb-3 flex items-center justify-between gap-2 border-b border-[#45536a] pb-2 text-sm text-[#c3cad5]">
+                    <strong className="capitalize">
+                      {new Intl.DateTimeFormat("hu-HU", { weekday: "long" }).format(dayDate)}
+                    </strong>
+                    <span className="flex items-center gap-2">
+                      {isCurrentDay && (
+                        <span className="rounded-full bg-[#c9a227] px-2 py-0.5 text-xs font-bold text-[#1b1305]">Ma</span>
+                      )}
+                      {formatDayMonth(dayKey)}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    {dayEvents.length === 0 ? (
+                      <div className="py-2 text-center text-sm text-[#8792a4] md:pt-6">Nincs esemény</div>
+                    ) : (
+                      dayEvents.map((event) => {
+                        const eventCategories = getEventCategories(event);
+
+                        return (
+                          <div
+                            key={event.id}
+                            className="rounded-lg border-l-4 p-2.5"
+                            style={{
+                              borderLeftColor: eventCategories[0].color,
+                              backgroundColor: `${eventCategories[0].color}22`,
+                            }}
+                          >
+                            <div className="text-xs font-medium text-[#c3cad5]">
+                              {formatTime(event.startDateTime)} - {formatTime(event.endDateTime)}
+                            </div>
+                            <div className="mt-1 break-words font-bold">{event.title}</div>
+                            {event.location && (
+                              <div className="mt-1 break-words text-sm text-[#c3cad5]">📍 {event.location}</div>
+                            )}
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {eventCategories.map((category) => (
+                                <span
+                                  key={category.id}
+                                  className="rounded-full px-2 py-0.5 text-xs font-bold text-[#101722]"
+                                  style={{ backgroundColor: category.color }}
+                                >
+                                  {category.name}
+                                </span>
+                              ))}
+                              {(event.tags ?? []).map((tag) => (
+                                <span
+                                  key={tag}
+                                  className="rounded-full border border-[#718099] px-2 py-0.5 text-xs text-[#dbe3ed]"
+                                >
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
       )}
 
-      {/* <footer className="shortcut-footer">
-        <span>Ctrl+Q</span>
-        {showTopBar ? " menü elrejtése" : " menü megjelenítése"}
-      </footer> */}
-
       {showLogin && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-5" onClick={() => setShowLogin(false)}>
-          <div className="w-full max-w-md rounded-2xl border border-[#45536a] bg-[#1b212b] p-6 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-black/60 p-3 sm:items-center sm:p-5"
+          onClick={() => setShowLogin(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Bejelentkezés"
+            className="w-full max-w-md rounded-2xl border border-[#45536a] bg-[#1b212b] p-5 shadow-2xl sm:p-6"
+            onClick={(event) => event.stopPropagation()}
+          >
             <h3 className="mb-5 font-serif text-2xl">Bejelentkezés</h3>
-            <form onSubmit={handleLogin} className="flex flex-col gap-4 [&_label]:flex [&_label]:flex-col [&_label]:gap-2 [&_label]:text-sm [&_label]:text-[#c3cad5] [&_input]:rounded-lg [&_input]:border [&_input]:border-[#45536a] [&_input]:bg-[#212836] [&_input]:px-3 [&_input]:py-2 [&_input]:text-[#f4f1e8]">
-              <label>
+            <form onSubmit={handleLogin} className="flex flex-col gap-4">
+              <label className={labelCls}>
                 <span>Felhasználónév</span>
                 <input
+                  className={inputCls}
+                  autoComplete="username"
+                  autoFocus
                   value={loginForm.username}
                   onChange={(event) =>
                     setLoginForm((previous) => ({ ...previous, username: event.target.value }))
@@ -717,10 +827,12 @@ export default function Home() {
                 />
               </label>
 
-              <label>
+              <label className={labelCls}>
                 <span>Jelszó</span>
                 <input
+                  className={inputCls}
                   type="password"
+                  autoComplete="current-password"
                   value={loginForm.password}
                   onChange={(event) =>
                     setLoginForm((previous) => ({ ...previous, password: event.target.value }))
@@ -728,26 +840,18 @@ export default function Home() {
                 />
               </label>
 
-              <div className="mt-2 flex flex-wrap gap-3">
-                <button type="submit" className="rounded-lg bg-[#c9a227] px-4 py-2 font-bold text-[#1b1305] hover:opacity-90">
-                  Belépés
-                </button>
-                <button
-                  type="button"
-                  className="rounded-lg border border-[#45536a] bg-[#212836] px-4 py-2 font-semibold text-[#f4f1e8] hover:opacity-90"
-                  onClick={() => setShowLogin(false)}
-                >
+              <div className="mt-2 flex flex-col-reverse gap-3 sm:flex-row">
+                <button type="button" className={`${btnSecondary} sm:flex-1`} onClick={() => setShowLogin(false)}>
                   Mégse
+                </button>
+                <button type="submit" className={`${btnPrimary} sm:flex-1`}>
+                  Belépés
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
-
-        <button onClick={() => setShowTopBar(prev => !prev)}>
-          x
-        </button>
     </main>
   );
 }
