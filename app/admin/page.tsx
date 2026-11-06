@@ -294,7 +294,7 @@ export default function AdminPage() {
   };
 
   const handleDeleteCategory = async (category: CategoryItem) => {
-    if (!window.confirm(`Biztosan törölni szeretnéd a(z) „${category.name}” kategóriát?`)) return;
+    if (!window.confirm(`Biztosan törölni szeretnéd a(z) „${category.name}” kategóriát? Az elsődleges kategóriaként ezt használó események is törlődnek.`)) return;
 
     const response = await fetch(`/api/categories/${category.id}`, {
       method: "DELETE",

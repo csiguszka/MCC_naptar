@@ -48,13 +48,8 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   }
 
   try {
-    const primaryCount = await prisma.event.count({ where: { categoryId: id } });
-    if (primaryCount > 0) {
-      return NextResponse.json(
-        { error: `A kategória nem törölhető, mert ${primaryCount} esemény elsődleges kategóriája. Előbb módosítsd vagy töröld ezeket az eseményeket.` },
-        { status: 409 },
-      );
-    }
+    // Az elsődleges kategóriaként használó eseményeket is töröljük.
+    await prisma.event.deleteMany({ where: { categoryId: id } });
 
     // Eltávolítjuk a kategóriát az események többes kategória listájából is.
     const linkedEvents = await prisma.event.findMany({
