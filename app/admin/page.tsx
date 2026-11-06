@@ -301,7 +301,8 @@ export default function AdminPage() {
     });
 
     if (!response.ok) {
-      setStatusMessage({ type: "error", text: "Nem sikerült törölni a kategóriát." });
+      const data = await response.json().catch(() => null);
+      setStatusMessage({ type: "error", text: data?.error ?? "Nem sikerült törölni a kategóriát." });
       return;
     }
 

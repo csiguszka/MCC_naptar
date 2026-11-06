@@ -48,9 +48,30 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   }
 
   try {
+    const primaryCount = await prisma.event.count({ where: { categoryId: id } });
+    if (primaryCount > 0) {
+      return NextResponse.json(
+        { error: `A kategória nem törölhető, mert ${primaryCount} esemény elsődleges kategóriája. Előbb módosítsd vagy töröld ezeket az eseményeket.` },
+        { status: 409 },
+      );
+    }
+
+    // Eltávolítjuk a kategóriát az események többes kategória listájából is.
+    const linkedEvents = await prisma.event.findMany({
+      where: { categoryIds: { has: id } },
+      select: { id: true, categoryIds: true },
+    });
+    for (const ev of linkedEvents) {
+      await prisma.event.update({
+        where: { id: ev.id },
+        data: { categoryIds: ev.categoryIds.filter((cid) => cid !== id) },
+      });
+    }
+
     await prisma.category.delete({ where: { id } });
     return NextResponse.json({ success: true });
-  } catch {
+  } catch (error) {
+    console.error("Kategória törlési hiba:", error);
     return NextResponse.json({ error: "Nem sikerült törölni a kategóriát." }, { status: 500 });
   }
 }
